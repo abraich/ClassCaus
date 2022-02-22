@@ -1,0 +1,9 @@
+streamlit==0.84.2
+torch
+sklearn
+torchtuples 
+matplotlib
+numpy
+pandas
+
+
