@@ -8,5 +8,4 @@ pandas
 scipy
 xgboost
 lightgbm
-warnings
 seaborn
