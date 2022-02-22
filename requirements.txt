@@ -5,5 +5,8 @@ torchtuples
 matplotlib
 numpy
 pandas
-
-
+scipy
+xgboost
+lightgbm
+warnings
+seaborn
