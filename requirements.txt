@@ -1,5 +1,5 @@
 torch == 1.8.1
-sklearn == 0.22.1
+sklearn 
 xgboost == 1.5.2
 lightgbm == 3.3.2
 numpy == 1.22.2
