@@ -1,13 +1,7 @@
 import numpy as np
 # from scipy import stats
-import matplotlib.pyplot as plt
-import numpy as np
-import torchtuples as tt
-import pandas as pd
-import seaborn as sns
 import torch  # For building the networks
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 def sigmoid(x):
