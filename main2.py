@@ -1,5 +1,5 @@
 
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -24,7 +24,7 @@ import warnings
 warnings.filterwarnings("ignore")
 # benchmark
 
-writer = SummaryWriter()
+#writer = SummaryWriter()
 # import plotly
 #  Helpers
 
