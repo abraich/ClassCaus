@@ -1,3 +1,8 @@
+import plotly.graph_objs as go
+import plotly.offline as py
+from cv2 import log
+from scipy.stats import wasserstein_distance
+from sympy import ordered
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
@@ -8,20 +13,9 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors import KNeighborsClassifier
 import xgboost as xgb
 import lightgbm as lgbm
-from cProfile import label
-from re import A
-from sqlite3 import paramstyle
-from statistics import mode
-from turtle import forward
-from urllib.request import proxy_bypass
-from cv2 import log
-from pyrsistent import b
-from responses import target
 from sklearn import metrics
-from sympy import E, ones
 import torch.nn as nn
 import torch.nn.functional as F
-import pandas
 from torch import Tensor, cat
 import torch
 import numpy as np
@@ -29,8 +23,6 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
-import yarg
-from utils import *
 from utils import *
 from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import auc, classification_report
@@ -40,8 +32,7 @@ warnings.filterwarnings("ignore")
 # benchmark
 
 writer = SummaryWriter()
-
-
+# import plotly
 #  Helpers
 
 
@@ -165,7 +156,7 @@ class DataLoader():
     def load_data_sim_benchmark(self):
 
         df = pd.read_csv(self.path + ".csv")
-        # df = reduce_mem_usage(df)
+        df = reduce_mem_usage(df)
         dim = df.shape[1]-9
 
         x_z_list = ["X" + str(i) for i in range(1, dim + 1)] + ["tt"]
@@ -310,7 +301,7 @@ class ClassifCaus(nn.Module):
         report = classification_report(y_test, y_pred_t)
         return acc, cf_m, f1_s, auc, kl, p_pred_t, report
 
-    def eval_all_test(self):
+    def eval_all_test(self, N):
         """
         It evaluates the model on the test set.
         :return: a dictionary with the accuracy, confusion matrix, f1-score, and AUC for class 0 and
@@ -327,24 +318,35 @@ class ClassifCaus(nn.Module):
         #
         cate_true = p_test_1 - p_test_0
         cate_pred = p_pred_1 - p_pred_0
+        ord_cate_true = np.argsort(cate_true)
+        ord_cate_pred = np.argsort(cate_pred)
 
-        plt.figure(figsize=(14, 10), dpi=120)
-        plt.plot(np.log(cate_true/cate_pred),
-                 label=' log(cate_true/cate_pred)')
+        fig_log = plt.figure(figsize=(14, 10), dpi=120)
+        log_cate = np.log(cate_true[ord_cate_true]
+                          [:N]/cate_pred[ord_cate_true][:N])
+        plt.plot(log_cate, label='log(cate_true/cate_pred)')
         plt.legend()
-        # plt.show()
+        plt.close(fig_log)
 
         fig_cate = plt.figure(figsize=(14, 10), dpi=120)
-        plt.plot(cate_true, 'b', label='cate true')
-        plt.plot(cate_pred, 'r', label='cate pred')
-        plt.plot(torch.mean(cate_true) * torch.ones(cate_true.shape),
+        ord_cate_true = np.argsort(cate_true)
+        ord_cate_pred = np.argsort(cate_pred)
+        diff_cate = cate_true - cate_pred
+        ord_diff_cate = np.argsort(diff_cate)
+        plt.plot(diff_cate[ord_diff_cate][:N], label='cate_true - cate_pred')
+
+        # plt.plot(cate_true[ord_cate_true][:N], cate_pred[ord_cate_
+        #plt.scatter(cate_pred[ord_cate_true][:N], marker='^',color='r',label='cate_pred')
+        #plt.plot(diff_cate[ord_diff_cate], 'g', label='diff cate')
+
+        #plt.plot(diff_cate[ord_diff_cate], 'g', label='diff cate')
+        plt.plot(torch.mean(cate_true[ord_cate_true][:N]) * torch.ones(cate_true[:N].shape),
                  'k--', label='mean cate true')
-        plt.plot(np.mean(cate_pred) * np.ones(cate_pred.shape),
+        plt.plot(np.mean(cate_pred[ord_cate_true][:N]) * np.ones(cate_pred[:N].shape),
                  'g--', label='mean cate pred')
 
         plt.legend()
         plt.close(fig_cate)
-
         # roc curve
         fig_roc = plt.figure(figsize=(14, 10), dpi=120)
         fpr_1, tpr_1, thresholds = metrics.roc_curve(y_test_1, p_pred_1)
@@ -374,7 +376,7 @@ class ClassifCaus(nn.Module):
         print(f' Report for tt = 0 : \n {report_0}')
         print(f' Report for tt = 1 : \n {report_1}')
 
-        return d_0, d_1, fig_roc, fig_cate,report_0,report_1
+        return d_0, d_1, fig_roc, fig_cate, fig_log, report_0, report_1
 
     def eval(self, x_test, y_test):
         pred_proba = self.model.predict_proba(input=x_test).squeeze()
@@ -433,7 +435,7 @@ class BenchmarkClassif():
 
         return model_base_0, model_base_1
 
-    def eval_model(self, model_name):
+    def eval_model(self, model_name, N):
         y_test_0 = torch.from_numpy(self.data.counter_test[:, 1]).float()
         y_test_1 = torch.from_numpy(self.data.counter_test[:, 2]).float()
         p_test_0 = torch.from_numpy(self.data.counter_test[:, 3]).float()
@@ -441,21 +443,33 @@ class BenchmarkClassif():
 
         model_base_0, model_base_1 = self.fit_model(model_name)
         p_pred_0 = model_base_0.predict_proba(
-            classifcaus.data.x_test[:, :-1])[:, 1]
+            self.data.x_test[:, :-1])[:, 1]
         y_pred_0 = (p_test_0 > 0.5) * 1.0
         p_pred_1 = model_base_1.predict_proba(
-            classifcaus.data.x_test[:, :-1])[:, 1]
+            self.data.x_test[:, :-1])[:, 1]
         y_pred_1 = (p_test_1 > 0.5) * 1.0
         cate_true = p_test_1 - p_test_0
         cate_pred = p_pred_1 - p_pred_0
+        ord_cate_true = np.argsort(cate_true)
+        ord_cate_pred = np.argsort(cate_pred)
+
+        fig_log = plt.figure(figsize=(14, 10), dpi=120)
+        log_cate = np.log(cate_true[ord_cate_true]
+                          [:N]/cate_pred[ord_cate_true][:N])
+        plt.plot(log_cate, label='log(cate_true/cate_pred)')
+        plt.legend()
+        plt.close(fig_log)
 
         fig_cate = plt.figure(figsize=(14, 10), dpi=120)
-        plt.plot(cate_true, 'b', label='cate true')
-        plt.plot(cate_pred, 'r', label='cate pred')
-        plt.plot(torch.mean(cate_true) * torch.ones(cate_true.shape),
-                 'k--', label='mean cate true')
-        plt.plot(np.mean(cate_pred) * np.ones(cate_pred.shape),
-                 'g--', label='mean cate pred')
+
+        diff_cate = cate_true - cate_pred
+        ord_diff_cate = np.argsort(diff_cate)
+        plt.plot(diff_cate[ord_diff_cate][:N], label='cate_true - cate_pred')
+
+        # plt.plot(cate_true[ord_cate_true][:N],marker='o',color='b',label='cate_true')
+        #plt.plot(cate_pred[ord_cate_true][:N], marker='^',color='r',label='cate_pred')
+        #plt.plot(diff_cate[ord_diff_cate], 'g', label='diff cate')
+
         plt.legend()
         plt.close(fig_cate)
 
@@ -481,18 +495,23 @@ class BenchmarkClassif():
         fig_roc = plt.figure(figsize=(14, 10), dpi=120)
         fpr_1, tpr_1, thresholds = metrics.roc_curve(y_test_1, p_pred_1)
         fpr_0, tpr_0, thresholds = metrics.roc_curve(y_test_0, p_pred_0)
-        plt.plot(fpr_1, tpr_1, label='ROC curve for class 1')
-        plt.plot(fpr_0, tpr_0, label='ROC curve for class 0')
+        plt.plot(fpr_1, tpr_1, label=f'tt = 1 with AUC = {auc_1.round(3)}')
+        plt.plot(fpr_0, tpr_0, label=f'tt = 0 with AUC = {auc_0.round(3)}')
+        plt.title(
+            f'ROC curve : KL_0 = {kl_0.round(3)} & KL_1 = {kl_1.round(3)}')
         plt.plot([0, 1], [0, 1], 'k--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.0])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.legend()
         plt.close(fig_roc)
-        
+
         report_0 = metrics.classification_report(y_test_0, y_pred_0)
         report_1 = metrics.classification_report(y_test_1, y_pred_1)
-        return d_0, d_1,fig_roc, fig_cate, report_0, report_1
+        return d_0, d_1, fig_roc, fig_cate, fig_log, report_0, report_1
 
-    def evall_all_bench(self, params_classifcaus):
+    def evall_all_bench(self, params_classifcaus, N):
         results = {}
         dic_fig = {}
         dic_report = {}
@@ -502,12 +521,14 @@ class BenchmarkClassif():
             if model_name == "ClassCaus":
                 classifcaus = ClassifCaus(params_classifcaus)
                 classifcaus.fit_model()
-                d_0, d_1, fig_roc, fig_cate,report_0,report_1 = classifcaus.eval_all_test()
+                d_0, d_1, fig_roc, fig_cate, fig_log, report_0, report_1 = classifcaus.eval_all_test(
+                    N)
 
             else:
-                d_0, d_1, fig_roc, fig_cate,report_0,report_1 = self.eval_model(model_name)
+                d_0, d_1, fig_roc, fig_cate, fig_log, report_0, report_1 = self.eval_model(
+                    model_name, N)
 
-            dic_fig[model_name] = [fig_roc, fig_cate]
+            dic_fig[model_name] = [fig_roc, fig_cate, fig_log]
             dic_report[model_name] = [report_0, report_1]
 
             results[model_name] = {'acc_0': d_0['acc'], 'acc_1': d_1['acc'], 'f1_0': d_0['f1'], 'f1_1': d_1['f1'],
@@ -518,9 +539,9 @@ class BenchmarkClassif():
         # to dataframe
         df_results = pd.DataFrame(results).transpose()
         df_results.to_csv(f'results_bench.csv')
-        return df_results, dic_fig,dic_report
+        return df_results, dic_fig, dic_report
 
-
+"""
 params_classifcaus = {
     "encoded_features": 25,
     "alpha_wass": 0.01,
@@ -531,7 +552,7 @@ params_classifcaus = {
 }
 
 classifcaus = ClassifCaus(params_classifcaus)
-
+"""
 """
 classifcaus.fit_model()
 classifcaus.eval_test()

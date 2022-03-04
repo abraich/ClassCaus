@@ -17,11 +17,6 @@ task = st.sidebar.selectbox("Choose a task", tasks_choices)
 
 st.title(f"ClassCaus- {task}")
 
-session_state = SessionState.get(
-    name='', params=None)  # cache the session state
-
-ev_cache = SessionState.get(name='', Ev=None)
-
 
 param_sim = {
     'n_features': 25,
@@ -53,8 +48,6 @@ if task == 'Simulation':
     sim = Simulation(param_sim)
     sim.simule()
 
-    session_state.params = param_sim
-    session_state.name = "Simulation"
     st.write({"Shape": sim.data_sim.shape,
               'WD': sim.wd, "% treatement": sim.perc_treatement})
     # print head datasim
@@ -79,24 +72,44 @@ if task == 'Benchmarking':
     alpha_wass = st.sidebar.number_input("alpha_wass", value=0.01)
     batch_size = st.sidebar.number_input("batch_size", value=128)
     epochs = st.sidebar.number_input("epochs", value=30)
-    lr = st.sidebar.number_input("lr", value=0.001)
     patience = st.sidebar.number_input("patience", value=10)
+    N = st.sidebar.number_input("N_test", value=200)
 
     if st.sidebar.button("Run"):
         Bench = BenchmarkClassif(list_models)
+
+        # Start training
+        st.write("Start training")
+        # progress bar
+        progress = st.progress(0)
         df_results, dic_fig, dic_report = Bench.evall_all_bench(
-            params_classifcaus)
-        # print results
+            params_classifcaus, N)
+        progress.progress(100)
+        # end training
+        st.write("End training")
+
+        # display results
         st.write(df_results)
+        # plot from df_results columns acc_0, acc_1, kl_0, kl_1, pehe in function of list_models
+        fig_acc = plt.figure(figsize=(10, 10))
+
+        plt.plot(df_results['acc_0'], label='acc_0')
+        plt.plot(df_results['acc_1'], label='acc_1')
+        plt.plot(df_results['auc_0'], label='auc_0')
+        plt.plot(df_results['auc_1'], label='auc_1')
+        plt.legend()
+        plt.close(fig_acc)
+        st.pyplot(fig_acc)
+
+        fig_pehe = plt.figure(figsize=(10, 10))
+        plt.plot(df_results['pehe'], label='pehe')
+        plt.legend()
+        plt.close(fig_pehe)
+        st.pyplot(fig_pehe)
         # plot figures
         for key, fig in dic_fig.items():
             # write key as title
             st.subheader(key)
             st.pyplot(fig[0])
             st.pyplot(fig[1])
-            
-        for key, report in dic_report.items():
-            # write key as title
-            st.subheader(key)
-            st.write(report[0])
-            st.write(report[1])
+            st.pyplot(fig[2])
