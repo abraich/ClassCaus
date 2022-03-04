@@ -5,5 +5,5 @@ lightgbm == 3.3.2
 numpy == 1.22.2
 matplotlib == 3.4.2
 pandas == 1.2.4
-torchtuples == 0.2.0
+torchtuples
 warnings
